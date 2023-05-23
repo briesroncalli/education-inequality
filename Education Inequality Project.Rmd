@@ -1,0 +1,1555 @@
+---
+title: "Education inequality"
+author: "Ben Ries-Roncalli"
+date: "April 22nd, 2022"
+output: html_document
+---
+
+
+
+## Introduction
+
+This project addresses inequality of educational opportunity in U.S. high schools. Here we will focus on average student performance on the ACT or SAT exams that students take as part of the college application process.
+
+We expect a range of school performance on these exams, but is school performance predicted by socioeconomic factors? 
+
+Public schools in the United States are designed with the goal of giving every student an equal opportunity to learn and succeed. However, this ideal of fairness can be very difficult to uphold, especially with the large disparities and differences between schools across the US. There hundreds, if not thousands, of different factors that can be wildly different from school to school, and providing an equal education across all these differences can be difficult, and often is not achieved. Thus, there exists a problem of education inequality in the US, where students may be disadvantaged due to factors they have no control over. To combat this issue, it is important to study what factors may be correlated with education inequality, which should hopefully point in the direction of future research that can determine the root cause of some of this inequality.
+
+We will be examining how a number of socioeconomic factors might correlate with unequal education in the US. In particular, we will be looking at the percentage of students receiving free & reduced lunch at a school and the median income, percentage of married individuals, unemployment rate, and percentage of college graduates in the geographic location of the school to try to identify and quantify some of the correlations between these variables and the quality of education the student is provided. Since there are very few reliable metrics for comparing academic performance on a national level, we will compare average ACT scores of different public high schools and use census data, along with data the school provides, to determine the socioeconomic factors at play. We'll be using this data to determine the answer to questions like do these socioeconomic factors correlate to performance on the ACT? If so, how do they correlate? Which factors correlate the strongest and how certain are we of their correlation? Can we predict ACT scores based on one or a number of these metrics? We'll also look at how these factors and test scores might vary between two states (Washington and New York) and compare these results to those we saw on the national level as well. All of these questions should help us to understand some ways in which socioeconomic factors may correlate with inequality in the public school system in the US. The answers to these question should provide some avenues for further research and, hopefully, these may lead to policy addressing this education inequality.
+
+
+## Data Collection
+
+This project utilizes two data sets. The primary data set is the EdGap data set from [EdGap.org](https://www.edgap.org/#5/37.875/-96.987). This data set from 2016 includes information about average ACT or SAT scores for schools and several socioeconomic characteristics of the school district. The secondary data set is basic information about each school from the [National Center for Education Statistics](https://nces.ed.gov/ccd/pubschuniv.asp).
+
+### EdGap data
+
+All socioeconomic data (household income, unemployment, adult educational attainment, and family structure) are from the Census Bureau's American Community Survey. 
+
+[EdGap.org](https://www.edgap.org/#5/37.875/-96.987) report that ACT and SAT score data is from each state's department of education or some other public data release. The nature of the other public data release is not known.
+
+The quality of the census data and the department of education data can be assumed to be reasonably high. 
+
+[EdGap.org](https://www.edgap.org/#5/37.875/-96.987) do not indicate that they processed the data in any way. The data were assembled by the [EdGap.org](https://www.edgap.org/#5/37.875/-96.987) team, so there is always the possibility for human error. Given the public nature of the data, we would be able to consult the original data sources to check the quality of the data if we had any questions.
+
+
+### School information data
+
+The school information data is from the [National Center for Education Statistics](https://nces.ed.gov/ccd/pubschuniv.asp). This data set consists of basic identifying information about schools and can be assumed to be of reasonably high quality. As for the EdGap.org data, the school information data is public, so we would be able to consult the original data sources to check the quality of the data if we had any questions.
+
+## Data Preparation
+
+### Load necessary packages
+
+```{r}
+#readxl lets us read Excel files
+library(readxl)
+#GGally has a nice pairs plotting function
+library(GGally)
+#skimr provides a nice summary of a data set
+library(skimr)
+#leaps will be used for model selection
+library(leaps)
+#kableExtra will be used to make tables in the html document
+library(kableExtra)
+#latex2exp lets us use LaTex in ggplot
+library(latex2exp)
+#tidyverse contains packages we will use for processing and plotting data
+library(tidyverse)
+```
+
+### Load the data 
+
+
+#### Load the EdGap set
+
+
+$\rightarrow$ Load the data set contained in the file `EdGap_data.xlsx` and name the data frame `edgap`.
+
+
+```{r}
+edgap <- read_excel("EdGap_data.xlsx")
+```
+
+
+### Explore the contents of the data set
+
+
+$\rightarrow$ Look at the first few rows of the data frame. 
+
+```{r}
+head(edgap)
+```
+
+
+
+Use the `View` function to explore the full data set.
+
+```{r, eval=FALSE}
+View(edgap)
+```
+
+
+#### Load school information data
+
+$\rightarrow$ Load the data set contained in the file `ccd_sch_029_1617_w_1a_11212017.csv` and name the data frame `school_info`.
+
+```{r}
+school_info <- read_csv("ccd_sch_029_1617_w_1a_11212017.csv")
+```
+
+
+
+$\rightarrow$ Look at the first few rows of the data frame. 
+
+```{r}
+head(school_info)
+```
+
+
+### Check for a tidy data frame
+
+In a tidy data set, each column is a variable or id and each row is an observation. We again start by looking at the head of the data frame to determine if the data frame is tidy.
+
+#### EdGap data
+
+```{r}
+
+head(edgap)
+
+```
+
+The units of observation are the schools. Each school occupies one row of the data frame, which is what we want for the rows.
+
+<br>
+
+$\rightarrow$ What variables are present? What types of variables are present?
+
+```{r}
+skim(edgap)
+```
+
+
+$\rightarrow$ Is the `edgap` data frame tidy?
+
+Yes, the data frame is tidy since each variable has its own column, each observation has its own row, and each value has its own cell.
+
+#### School information data
+
+We again start by looking at the head of the data frame to determine if the data frame is tidy.
+
+
+```{r}
+
+head(school_info)
+
+```
+
+It is more difficult to assess whether this data frame is tidy because of the large number of columns with confusing names.
+
+We have 65 columns, but many of the columns are identifying features of the school and are irrelevant for the analysis. We will select a subset of columns and do the analysis on the subset.
+
+#### Select a subset of columns
+
+We want to select the following variables:
+
+```{r, echo=FALSE, warning=FALSE}
+
+column_names = c("NCESSCH", "MSTATE", "MZIP", "SCH_TYPE_TEXT", "LEVEL")
+
+column_description = c("NCES School ID", "State name", "Zip code", "School type", "LEVEL")
+
+data.frame(name = column_names, description = column_description) %>% 
+  kbl() %>% 
+  kable_styling()
+
+```
+<br>
+
+$\rightarrow$ Use the `select` function to select these columns from the data frame. 
+
+```{r}
+school_info <- school_info %>%
+  select("NCESSCH", "MSTATE", "MZIP", "SCH_TYPE_TEXT", "LEVEL")
+```
+
+
+$\rightarrow$ Examine the head of the new, smaller data frame
+
+```{r}
+head(school_info)
+```
+
+
+$\rightarrow$ Is the data frame tidy?
+
+Yes: each variable has its own column, each observation has its own row, and each value has its own cell.
+
+### Further exploration of basic properties
+
+#### EdGap data
+
+$\rightarrow$ How many observations are in the EdGap data set?
+
+```{r}
+nrow(edgap)
+```
+
+There are 7986 rows, so there are 7986 observations in the data set.
+
+#### School information data
+
+$\rightarrow$ How many observations are in the school information data set?
+
+```{r}
+nrow(school_info)
+```
+
+There are 102,181 rows, so there are 102,181 observations in the data set.
+
+
+### Data cleaning
+
+
+#### Rename variables
+
+In any analysis, we might rename the variables in the data frame to make them easier to work with. We have seen that the variable names in the `edgap` data frame allow us to understand them, but they can be improved. In contrast, many of the variables in the `school_info` data frame have confusing names.
+
+Importantly, we should be thinking ahead to joining the two data frames based on the school ID. To facilitate this join, we should give the school ID column the same name in each data frame.
+
+#### EdGap data
+
+$\rightarrow$ View the column names for the EdGap data
+
+```{r}
+names(edgap)
+```
+
+
+To follow best practices, we should
+
+1. Use all lowercase letters in variable names.
+2. Use underscores `_` between words in a variable name. Do not use blank spaces, as they have done.
+3. Do not use abbreviations, e.g. `Pct`, that can easily be written out.
+4. Be consistent with naming structure across variables. For example, the descriptions `rate`, `percent`, `median`, and `average` should all either be at the beginning or end of the name. 
+
+
+We will use the `rename` function from the `dplyr` package to rename the columns.
+
+```{r}
+#The new name for the column is on the left of the =
+
+edgap <- edgap %>% 
+  rename(id = "NCESSCH School ID",
+         rate_unemployment = "CT Unemployment Rate",
+         percent_college = "CT Pct Adults with College Degree",
+         percent_married = "CT Pct Childre In Married Couple Family",
+         median_income = "CT Median Household Income",
+         average_act = "School ACT average (or equivalent if SAT score)",
+         percent_lunch = "School Pct Free and Reduced Lunch"
+        )
+
+```
+
+$\rightarrow$ Use the `names` function to see that the names have changed
+
+```{r}
+names(edgap)
+```
+
+
+#### School information data
+
+$\rightarrow$ View the column names for the school information data
+
+```{r}
+names(school_info)
+```
+
+The names can be improved for readability. We also have the constraint that we rename `ncessch` to `id` to be consistent with the `edgap` data.
+
+Rename the columns of the school information data frame.
+
+```{r}
+
+school_info <- school_info %>% 
+  rename(id = "NCESSCH",
+         state = "MSTATE",
+         zip_code = "MZIP",
+         school_type = "SCH_TYPE_TEXT",
+         school_level = "LEVEL"
+         )
+
+#Print the names to see the change
+names(school_info)
+
+```
+
+
+#### Join
+
+We will join the `edgap` and `school_info` data frames based on the school ID. We should first note that the `id` is coded differently in the two data frames:
+
+```{r}
+
+typeof(edgap$id)
+
+typeof(school_info$id)
+
+```
+
+While `id` is a number, it is a categorical variable and should be represented as a character variable in R. 
+
+
+Convert `id` in `edgap` id to a character variable:
+
+We will use the `mutate` function from the `dplyr` package to rename the columns.
+
+```{r}
+
+edgap <- edgap %>% 
+  mutate(id = as.character(id))
+
+#Check that the type has been converted to character
+typeof(edgap$id)
+
+```
+
+We will now join the data frames. We want to perform a left join based on the school ID `id` so that we incorporate all of the school information into the `edgap` data frame.
+
+```{r}
+
+edgap <- edgap %>% 
+  left_join(school_info, by = "id") 
+  
+```
+
+Examine the head of the new data frame:
+```{r}
+
+head(edgap)
+
+```
+
+
+#### Identify and deal with missing values
+
+$\rightarrow$ How many missing values are there in each column? Give the number of missing values and the percent of values in each column that are missing.
+
+
+Recall that missing values are coded in R with `NA`, or they may be empty. We want to convert empty cells to `NA`, so that we can use the function `is.na` to find all missing values. The function `read_excel` that we used to read in the data does this automatically, so we do not need to take further action to deal with empty cells.
+
+
+```{r}
+print("Total NAs:")
+colSums(is.na(edgap))
+
+print("Percent NAs:")
+colSums(is.na(edgap))/nrow(edgap)*100
+```
+
+
+
+$\rightarrow$ Find the rows where the missing value occurs in each column.
+
+```{r}
+apply(is.na(edgap),2,which)
+```
+
+
+Now we need to decide how to deal with the `NA`s. We have a few decisions to make:
+
+1. Do we drop rows that have `NA`s?
+2. Do we replace `NA`s with something like the mean of the variable?
+3. Do we replace `NA`s with estimates based on the other variable values?
+
+There are some schools that are missing all four of the socioeconomic variables, e.g. at rows 142 and 205. However, many of the schools are missing only a subset of the variables. If we drop rows that have `NA`s, then we will negatively affect our analysis using the variables where data were present. So, we will not drop the rows in this data set that are missing the socioeconomic variables. We have so few missing values from each value that we will not worry about replacing `NA`s with some other value. We will selectively omit the `NA`s when working with those columns.
+
+There are, however, 88 schools where we do not have the school information. This raises the possibility that the information is unreliable. Because we are not able to check from the source, we will omit these rows from the data set.
+
+$\rightarrow$ Use the `filter` function to drop only those rows where the state information is missing.
+
+```{r}
+edgap <- edgap %>% filter(is.na(state) == FALSE)
+```
+
+
+Recheck for missing values:
+```{r}
+
+skim(edgap)
+
+```
+
+
+### Are there data points that look like errors?
+
+We will do some quality control for the data set.
+
+We can check the range of each variable to see that the values fall in the expected ranges.
+
+```{r}
+summary(edgap)
+```
+
+There are a few suspicious values. The minimum `average_act` is -3.071, but ACT scores must be non-negative. Similarly, the minimum `percent_lunch` is -0.05455, but a percent must be non-negative. These are out-of-range values. We do not have access to information about how these particular data points were generated, so we will remove them from the data set by converting them to `NA`.
+
+```{r}
+
+#Number of NA ACT scores before conversion
+sum(is.na(edgap$average_act))
+
+#Convert negative scores to NA
+edgap[edgap$average_act < 0,"average_act"] = NA
+
+#Number of NA ACT scores after conversion
+sum(is.na(edgap$average_act))
+```
+
+There were 3 schools with negative ACT scores, where the values were omitted from the data set.
+
+```{r}
+
+#Number of NA percent_lunch values before conversion
+sum(is.na(edgap$percent_lunch))
+
+#Convert negative values to NA
+edgap[edgap$percent_lunch < 0,"percent_lunch"] = NA
+
+#Number of NA percent_lunch values after conversion
+sum(is.na(edgap$percent_lunch))
+```
+
+There were 20 schools with negative percent free or reduced lunch, where the values were omitted from the data set.
+
+```{r}
+edgap %>% 
+  count(school_level) %>% 
+  mutate(proportion = round(n/sum(n),3))
+```
+
+
+$\rightarrow$ What school levels are present in the data set and with what frequency? Present the results as a table and as a bar graph.
+
+```{r}
+edgap %>% 
+  count(school_level) %>%
+  mutate(school_level = fct_reorder(school_level, n)) %>% 
+  ggplot(aes(x = school_level, y = n)) +
+  geom_col() +
+  coord_flip() +
+  labs(x = "School level", y = "Count") +
+  theme_bw()
+```
+
+
+$\rightarrow$ Modify the `edgap` data frame to include only the schools that are high schools.
+
+```{r}
+edgap <- edgap %>% filter(school_level == "High")
+edgap %>% 
+  count(school_level) %>% 
+  mutate(proportion = round(n/sum(n),3))
+```
+
+
+## Exploratory data analysis
+
+
+We have two main goals when doing exploratory data analysis. The first is that we want to understand the data set more completely. The second goal is to explore relationships between the variables to help guide the modeling process to answer our specific question.
+
+
+### Graphical summaries
+
+Make a pairs plot of the ACT scores and the socioeconomic variables. We will use the `ggpairs` function from the `GGally` package. 
+
+```{r warning=FALSE}
+
+#It may take a few seconds to produce the plot
+
+edgap %>% 
+  select(-c(id,state,zip_code,school_type,school_level)) %>% 
+  ggpairs(lower = list(continuous=wrap("smooth"))) +
+  theme_bw()
+
+```
+
+#### Distributions of individual numerical variables
+
+$\rightarrow$ Describe the shape of the distribution of each variable. 
+
+All distributions appear to be unimodal.
+
+`rate_unemployment` has a positively skewed distribution. The values near 0.6 may be outliers.
+
+`percent_college` has a roughly symmetric distribution.
+
+`percent_married` has a negatively skewed distribution.
+
+`average_act` has an approximately normal distribution. This is not surprising for a distribution of averages.
+
+`median_income` has a positively skewed distribution, which is what you expect for income distributions.
+
+`percent_lunch` has a slightly positively skewed distribution.
+
+#### Categorical variables
+
+What states are present in the data set and with what frequency?
+
+$\rightarrow$ First find the states present.
+
+```{r}
+edgap %>% 
+  select(state) %>% 
+  unique()
+```
+
+
+$\rightarrow$ Now count the observations by state. Display the results as a bar graph.
+
+```{r}
+edgap %>% 
+  count(state) %>% 
+  ggplot(aes(x = state, y = n)) +
+  geom_col() +
+  coord_flip() +
+  labs(x = "State", y = "Count") +
+  theme_bw()
+```
+
+
+
+$\rightarrow$ Reorder the states by count using `fct_reorder`
+
+```{r}
+edgap %>% 
+  count(state) %>%
+  mutate(state = fct_reorder(state, n)) %>% 
+  ggplot(aes(x = state, y = n)) +
+  geom_col() +
+  coord_flip() +
+  labs(x = "State", y = "Count") +
+  theme_bw()
+```
+
+
+$\rightarrow$ What school types are present in the data set and with what frequency? Present the results as a table and as a bar graph.
+
+
+```{r}
+edgap %>% 
+  count(school_type) %>% 
+  mutate(proportion = round(n/sum(n),3))
+```
+
+The vast majority (99.8%) are regular schools, but there are a few other types of schools.
+
+We can also present the information as a graph:
+
+```{r}
+edgap %>% 
+  count(school_type) %>%
+  mutate(school_type = fct_reorder(school_type, n)) %>% 
+  ggplot(aes(x = school_type, y = n)) +
+  geom_col() +
+  coord_flip() +
+  labs(x = "School type", y = "Count") +
+  theme_bw()
+```
+
+but the graph can be misleading because of the large number of regular schools and the few schools of the other types.
+
+```{r}
+edgap %>% 
+  filter(school_type != "Regular School") %>%
+  count(school_type) %>%
+  mutate(school_type = fct_reorder(school_type, n)) %>% 
+  ggplot(aes(x = school_type, y = n)) +
+  geom_col() +
+  coord_flip() +
+  labs(x = "School type", y = "Count") +
+  theme_bw()
+```
+
+
+#### Focus on relationships with `average_act`
+
+Our primary goal is to determine whether there is a relationship between the socioeconomic variables and `average_act`, so we will make plots to focus on those relationships.
+
+The largest correlation coefficient between a socioeconomic variable and `average_act` is for `percent_lunch`, so we will start there.
+
+$\rightarrow$ Make a scatter plot of `percent_lunch` and `average_act`
+
+```{r}
+ggplot(edgap, aes(x = percent_lunch, y = average_act)) +
+  geom_point() +
+  labs(x = 'Percent reduced or free lunch', y = 'Average school ACT or equivalent if SAT') +
+  theme_bw()
+```
+
+There is a clear negative linear association between percent_lunch and average_act.
+
+Why is there a wide range of ACT scores at percent_lunch = 0? It may be the case that some schools have no students receiving free or reduced lunch because the program does not exist, not because there are no families that would qualify under typical standards. This would require further research into the availability of the free or reduced price lunch program.
+
+
+$\rightarrow$ Make a scatter plot of `median_income` and `average_act`
+
+```{r}
+ggplot(edgap, aes(x = median_income, y = average_act)) +
+  geom_point() +
+  labs(x = 'Median Income ($)', y = 'Average school ACT or equivalent if SAT') +
+  theme_bw()
+```
+
+There is a positive association between median_income and average_act. The form of the association appears to be nonlinear.
+
+
+$\rightarrow$ `median_income` has a skewed distribution, so make a scatter plot with `median_income` plotted on a log scale.
+
+```{r}
+ggplot(edgap, aes(x = median_income, y = average_act)) +
+  geom_point() +
+  scale_x_log10() +
+  labs(x = 'Median Income ($)', y = 'Average school ACT or equivalent if SAT') +
+  theme_bw()
+```
+
+There is a positive linear associate between the log of median_income and average_act. Note also that the typical regression assumption of equal variance of errors is closer to being satisfied after the log transformation.
+
+
+$\rightarrow$ Make a scatter plot of `percent_college` and `average_act`
+
+```{r}
+ggplot(edgap, aes(x = percent_college, y = average_act)) +
+  geom_point() +
+  labs(x = 'Percent college', y = 'Average school ACT or equivalent if SAT') +
+  theme_bw()
+```
+
+There is a positive association between percent_college and average_act. There may be a nonlinear component to the association, but it is difficult to assess visually from the scatter plot.
+
+
+$\rightarrow$ Make a scatter plot of `percent_married` and `average_act`
+
+```{r}
+ggplot(edgap, aes(x = percent_married, y = average_act)) +
+  geom_point() +
+  labs(x = 'Percent married', y = 'Average school ACT or equivalent if SAT') +
+  theme_bw()
+```
+
+There is a positive association between percent_married and average_act.
+
+
+$\rightarrow$ Make a scatter plot of `rate_unemployment` and `average_act`
+
+
+
+`rate_unemployment` has a positively skewed distribution, so we should make a scatter plot on a transformed scale. There are values of `rate_unemployment` that are equal to zero, so we will use a square root transformation, rather than a log transformation.
+
+```{r}
+min(edgap$rate_unemployment, na.rm = TRUE)
+```
+
+```{r}
+library(latex2exp) #This library is used for LaTex in the axis labels
+
+edgap %>% 
+  ggplot(aes(x = sqrt(rate_unemployment), y = average_act)) +
+  geom_point() +
+  labs(x = TeX('$\\sqrt{$Rate of unemployment$}$'), y = 'Average school ACT or equivalent if SAT') +
+  theme_bw()
+
+```
+
+#### Numerical summaries
+
+$\rightarrow$ Use the `skim` function to examine the basic numerical summaries for each variable.
+
+```{r}
+edgap %>% select(-id) %>% skim()
+```
+
+
+## Model
+
+Our exploratory data analysis has led to the following observations that will help guide the modeling process:
+
+1. Each of the socioeconomic variables is associated with the ACT score and is worthwhile to consider as a predictor.
+2. Some of the socioeconomic variables may have a nonlinear relationship with the ACT score, so nonlinear models should be explored.
+3. The socioeconomic variables are correlated with each other, so the best prediction of ACT score might not include all socioeconomic variables.
+
+### Simple linear regression with each socioeconomic predictor
+
+In this project, we are very concerned with understanding the relationships in the data set; we are not only concerned with building a model with the highest prediction accuracy. Therefore, we will start by looking at simple linear regression models using each socioeconomic predictor. 
+
+#### Percent free or reduced lunch
+
+**Fit a model**
+
+We want to fit the simple linear regression model
+
+`average_act` $\approx \beta_0 + \beta_1$ `percent_lunch`
+
+Use the function `lm` to fit a simple linear regression model.
+
+```{r}
+
+fit_pl <- lm(average_act ~ percent_lunch, data = edgap)
+
+```
+
+Use the `summary` function to 
+
+1. Interpret the coefficients in the model.
+2. Assess the statistical significance of the coefficient on the predictor variable.
+
+```{r}
+summary(fit_pl)$coefficients
+summary(fit_pl)
+```
+
+The intercept is 23.7 and the slope is -8.39. The intercept is interpreted as the best estimate for the mean ACT score when `percent_lunch` is zero. The slope can be interpreted as saying that a `percent_lunch` increase of 0.1 is associated with a decrease in the estimated mean ACT score of -0.839 points. 
+
+The slope is highly statistically significant, as the p-values are reported as zero. So, there is a statistically significant relationship between `percent_lunch` and the average ACT score in a school. 
+
+Plot the regression line together with the scatter plot
+
+```{r, warning=FALSE}
+#geom_smooth(method = "lm",formula = y ~ x) adds the regression line to the scatter plot
+
+ggplot(edgap, aes(x = percent_lunch, y = average_act)) + 
+  geom_point() + 
+  geom_smooth(method = "lm",formula = y ~ x) +
+  labs(x = "Percent free or reduced lunch", y = "School ACT average (or equivalent if SAT score)") +
+  theme_bw()
+```
+
+
+
+**Assess the accuracy of the fit**
+
+Examine the $R^2$ and the residual standard error
+
+```{r}
+summary(fit_pl)$r.squared
+# r^2 gives histogram for a SPECIFIC GIVEN x. Aka you explained r^2*100 % of the variance by your model
+#also residual std err (not squared) gives you error bounds (ie you're 'off' by about +/-1.6 at each point)
+```
+
+The simple linear regression model using percent free or reduced lunch as a predictor can explain 61.6% in the variance of the ACT score. 
+
+
+```{r}
+summary(fit_pl)$sigma
+```
+
+The residual standard error is 1.56 points. This means that the model is off by about 1.56 points, on average. 
+
+Together, these results show that we can make a good prediction of the average ACT score in a school only by knowing the percent of students receiving free or reduced lunch.
+
+Note that, in this example, we called different components from the `summary` output individually. We took this approach to walk through each step of the analysis, but you can simply look at the output of `summary(fit_pl)` to see all of the information at once.
+
+**Residual plot**
+
+Examine a residual plot to see if we can improve the model through a transformation of the `percent_lunch` variable.
+
+```{r, warning=FALSE}
+#We will use ggplot2 to make the residual plot. You can also use plot(fit_pl) 
+ggplot(fit_pl,aes(x=percent_lunch, y=.resid)) + 
+  geom_point() +
+  geom_smooth(method = "loess", formula = y ~ x) +
+  labs(x = "Percent free or reduced lunch", y = "Residuals") +
+  theme_bw()
+# if the residual had cubic structure, maybe should've used cubic, if parabolic, should've use x^2, etc for other structure
+```
+
+The residual plot does not have much systematic structure, so we have used `percent_lunch` as well as we can as a predictor. We do not need to consider a more complicated model that only uses `percent_lunch` as an input variable.
+
+
+#### Median income
+
+**Fit a model**
+
+We want to fit the simple linear regression model
+
+`average_act` $\approx \beta_0 + \beta_1$ `median_income`
+
+$\rightarrow$ Use the function `lm` to fit a simple linear regression model.
+
+```{r}
+fit_mi <- lm(average_act ~ median_income, data = edgap)
+```
+
+
+
+$\rightarrow$ Use the `summary` function to:
+
+
+1. Interpret the coefficients in the model.
+2. Assess the statistical significance of the coefficient on the predictor variable.
+
+```{r}
+summary(fit_mi)$coefficients
+```
+
+The intercept is 17.8 and the slope is $4.7\times 10^{-5}$.
+
+
+The intercept is interpreted as the best estimate for the mean ACT score when `median_income` is zero. The `median income` is never equal to zero, so the intercept does not have a clear interpretation in this model.
+
+The slope can be interpreted as saying that a difference of \$1 in `median_income` is associated with a difference in the estimated mean ACT score of $4.7 \times 10^{-5}$ points. This value of the slope is not intuitive because the median income is in dollars, but differences in annual income of several dollars is not meaningful. It would be helpful to represent median income in tens of thousands of dollars to make a one-unit change more meaningful.
+
+We will use the mutate function to add a new variable to the data frame called `median_income_10k` that represents median income in tens of thousands of dollars.
+
+```{r}
+edgap <- edgap %>% 
+  mutate(median_income_10k = median_income/1e4)
+```
+
+We can refit the model
+
+```{r}
+fit_mi <- lm(average_act ~ median_income_10k, data = edgap)
+
+summary(fit_mi)$coefficients
+```
+
+The intercept remains 17.8, but the slope is now 0.47, corresponding to the scaling of the median income units.
+
+The slope can be interpreted as saying that a difference of $10,000 in median income is associated with a difference in the estimated mean ACT score of 0.47 points.
+
+The slope is highly statistically significant. So, there is a statistically significant relationship between median income and the average ACT score in a school.
+
+
+$\rightarrow$ Plot the regression line together with the scatter plot
+
+```{r}
+ggplot(edgap, aes(x = median_income_10k, y = average_act)) + 
+  geom_point() + 
+  geom_smooth(method = "lm",formula = y ~ x) +
+  labs(x = "Median Household Income (ten thousand $)", y = "School ACT average (or equivalent if SAT score)") +
+  theme_bw()
+```
+
+
+**Assess the accuracy of the fit**
+
+$\rightarrow$ Examine the $R^2$ and the residual standard error
+
+```{r}
+summary(fit_mi)$r.squared
+```
+
+The simple linear regression model using median income as a predictor explains 21.2% in the variance of the ACT score.
+
+```{r}
+summary(fit_mi)$sigma
+```
+
+The residual standard error is 2.26 points. This means that the model is off by about 2.26 points, on average.
+
+Together, these results show that we can do some moderate prediction of the average ACT score in a school only by knowing the median income.
+
+
+**Residual plot**
+
+$\rightarrow$ Examine a residual plot to see if we can improve the model through a transformation of the `median_income_10` variable.
+
+```{r}
+ggplot(fit_mi,aes(x=median_income_10k, y=.resid)) + 
+  geom_point() +
+  geom_smooth(method = "loess", formula = y ~ x) +
+  labs(x = "Median Household Income (ten thousand $)", y = "Residuals") +
+  theme_bw()
+```
+
+The residual plot suggests that a nonlinear model may improve the fit.
+
+We will try a log transformation.
+
+
+**Log transformation**
+
+**Fit the model**
+
+$\rightarrow$ Fit a linear regression model using the log of `median_income_10` as the predictor.
+
+```{r}
+fit_mi_log <- lm(average_act ~ log10(median_income_10k), data = edgap)
+```
+
+
+$\rightarrow$ Use the `summary` function to:
+
+1. Interpret the coefficients in the model.
+2. Assess the statistical significance of the coefficient on the predictor variable.
+
+```{r}
+summary(fit_mi_log)$coefficients
+```
+
+The intercept is 16.0. The intercept is interpreted as the prediction of the average ACT score when the predictor is zero, which means that the median income is $10,000.
+
+The slope is 6.3. Because we used a base 10 log, the slope is interpreted as saying that a median income ten times greater than another is associated with an average ACT score that is 6.3 points higher.
+
+The slope is highly statistically significant.
+
+
+$\rightarrow$ Plot the regression line together with the scatter plot
+
+```{r}
+ggplot(edgap, aes(x = log10(median_income_10k), y = average_act)) + 
+  geom_point() + 
+  geom_smooth(method = "lm",formula = y ~ x) +
+  labs(x = "Log of median Household Income", y = "School ACT average (or equivalent if SAT score)") +
+  theme_bw()
+```
+
+
+**Assess the accuracy of the fit**
+  
+$\rightarrow$ Examine the $R^2$ and the residual standard error
+
+```{r}
+summary(fit_mi_log)$r.squared
+```
+
+The simple linear regression model using median income as a predictor can explain 21.6% in the variance of the ACT score.
+
+```{r}
+summary(fit_mi_log)$sigma
+```
+
+The residual standard error is 2.22 points. This means that the model is off by about 2.22 points, on average.
+
+Together, these results show that we can do some moderate prediction of the average ACT score in a school only by knowing the median income.
+
+
+**Residual plot**
+
+$\rightarrow$ Examine a residual plot to see if we can improve the model through a transformation of the input.
+
+```{r}
+ggplot(fit_mi_log, aes(x=.fitted, y=.resid)) + 
+  geom_point() +
+  geom_smooth(method = "loess", formula = y ~ x) +
+  labs(x = "Log Median Household Income", y = "Residuals") +
+  theme_bw()
+```
+
+The structure in the residual plot appears to be due to the points near 14. Therefore, we will not consider further transformations.
+
+
+#### Percent college
+
+**Fit a model**
+
+We want to fit the simple linear regression model
+
+`average_act` $\approx \beta_0 + \beta_1$ `percent_college`
+
+$\rightarrow$ Use the function `lm` to fit a simple linear regression model.
+
+```{r}
+fit_pc <- lm(average_act ~ percent_college, data = edgap)
+```
+
+
+$\rightarrow$ Use the `summary` function to 
+
+1. Interpret the coefficients in the model.
+2. Assess the statistical significance of the coefficient on the predictor variable.
+
+```{r}
+summary(fit_pc)$coefficients
+```
+
+The slope is highly statistically significant. So, there is a statistically significant relationship between percent college and the average ACT score in a school.
+
+
+$\rightarrow$ Plot the regression line together with the scatter plot
+
+```{r}
+ggplot(edgap, aes(x = percent_college, y = average_act)) + 
+  geom_point() + 
+  geom_smooth(method = "lm",formula = y ~ x) +
+  labs(x = "Percent college", y = "School ACT average (or equivalent if SAT score)") +
+  theme_bw()
+```
+
+
+**Assess the accuracy of the fit**
+
+$\rightarrow$ Examine the $R^2$ and the residual standard error
+
+```{r}
+summary(fit_pc)$r.squared
+```
+
+The simple linear regression model using median income as a predictor can explain 21.0% in the variance of the ACT score.
+
+```{r}
+summary(fit_pc)$sigma
+```
+
+The residual standard error is 2.23 points. This means that the model is off by about 2.23 points, on average.
+
+Together, these results show that we can do some moderate prediction of the average ACT score in a school only by knowing the percent of college graduates among adults.
+
+
+**Residual plot**
+
+$\rightarrow$ Examine a residual plot to see if we can improve the model through a transformation of the input variable.
+
+```{r}
+ggplot(fit_pc, aes(x=percent_college, y=.resid)) + 
+  geom_point() +
+  geom_smooth(method = "loess", formula = y ~ x) +
+  labs(x = "Percent college", y = "Residuals") +
+  theme_bw()
+```
+
+The residual plot has a small suggestion that a quadratic model might be useful.
+
+
+$\rightarrow$ Fit and assess a quadratic model
+
+```{r}
+fit_pc_quad <- lm(average_act ~ poly(percent_college,2, raw = T), data = edgap)
+summary(fit_pc_quad)
+```
+
+The coefficient on the squared term is not significant, so the quadratic model does not provide an improvement over the linear model.
+
+
+#### Rate of unemployment
+
+**Fit a model**
+
+We want to fit the simple linear regression model
+
+`average_act` $\approx \beta_0 + \beta_1$ `rate_unemployment`
+
+$\rightarrow$ Use the function `lm` to fit a simple linear regression model.
+
+```{r}
+fit_ru <- lm(average_act ~ rate_unemployment, data = edgap)
+```
+
+
+$\rightarrow$ Use the `summary` function to:
+
+1. Interpret the coefficients in the model.
+2. Assess the statistical significance of the coefficient on the predictor variable.
+
+```{r}
+summary(fit_ru)$coefficients
+```
+
+The slope is highly statistically significant. So, there is a statistically significant relationship between unemployment rate and the average ACT score in a school.
+
+
+$\rightarrow$ Plot the regression line together with the scatter plot
+
+```{r}
+ggplot(edgap, aes(x = rate_unemployment, y = average_act)) + 
+  geom_point() + 
+  geom_smooth(method = "lm",formula = y ~ x) +
+  labs(x = "Unemployment rate", y = "School ACT average (or equivalent if SAT score)") +
+  theme_bw()
+```
+
+
+
+**Assess the accuracy of the fit**
+
+$\rightarrow$ Examine the $R^2$ and the residual standard error
+
+```{r}
+summary(fit_ru)$r.squared
+```
+
+The simple linear regression model using unemployment rate as a predictor can explain 18.8% in the variance of the ACT score.
+
+```{r}
+summary(fit_ru)$sigma
+```
+
+The residual standard error is 2.26 points. This means that the model is off by about 2.26 points, on average.
+
+Together, these results show that we can do some moderate prediction of the average ACT score in a school only by knowing the unemployment rate.
+
+
+**Residual plot**
+
+$\rightarrow$ Examine a residual plot to see if we can improve the model.
+
+```{r}
+ggplot(fit_ru,aes(x=rate_unemployment, y=.resid)) + 
+  geom_point() +
+  geom_smooth(method = "loess", formula = y ~ x) +
+  labs(x = "Unemployment rate", y = "Residuals") +
+  theme_bw()
+```
+
+
+Try a square root transformation of `rate_unemployment`
+
+```{r}
+fit_ru_sqrt <- lm(average_act ~ sqrt(rate_unemployment), data = edgap)
+summary(fit_ru_sqrt)
+```
+
+The square root transformation provides a small improvement over the linear model.
+
+```{r}
+ggplot(edgap, aes(x = rate_unemployment, y = average_act)) + 
+  geom_point() + 
+  geom_smooth(method = "lm", formula = y ~ x) +
+  geom_smooth(method = "lm", formula = y ~ sqrt(x),color = 'red') +
+  labs(x = "Unemployment rate", y = "School ACT average (or equivalent if SAT score)") +
+  theme_bw()
+```
+
+The models are very similar for most of the data, but differ a lot for high unemployment rates. There are few data points with high unemployment rates, so the numerical measures of accuracy are very similar.
+
+```{r}
+ggplot(fit_ru_sqrt,aes(x=.fitted, y=.resid)) + 
+  geom_point() +
+  geom_smooth(method = "loess", formula = y ~ x) +
+  labs(x = "Square root of unemployment rate", y = "Residuals") +
+  theme_bw()
+```
+
+
+#### Percent married
+
+**Fit a model**
+
+We want to fit the simple linear regression model
+
+`average_act` $\approx \beta_0 + \beta_1$ `percent_married`
+
+$\rightarrow$ Use the function `lm` to fit a simple linear regression model.
+
+```{r}
+fit_pm <- lm(average_act ~ percent_married, data = edgap)
+```
+
+
+$\rightarrow$ Use the `summary` function to:
+
+1. Interpret the coefficients in the model.
+2. Assess the statistical significance of the coefficient on the predictor variable.
+
+```{r}
+summary(fit_pm)$coefficients
+```
+
+The slope is highly statistically significant. So, there is a statistically significant relationship between percent married and the average ACT score in a school.
+
+
+$\rightarrow$ Plot the regression line together with the scatter plot
+
+```{r}
+ggplot(edgap, aes(x = percent_married, y = average_act)) + 
+  geom_point() + 
+  geom_smooth(method = "lm",formula = y ~ x) +
+  labs(x = "Percent married", y = "School ACT average (or equivalent if SAT score)") +
+  theme_bw()
+```
+
+
+**Assess the accuracy of the fit**
+
+$\rightarrow$ Examine the $R^2$ and the residual standard error
+
+```{r}
+summary(fit_pm)$r.squared
+```
+
+The simple linear regression model using percent married as a predictor can explain 19.4% in the variance of the ACT score.
+
+```{r}
+summary(fit_pm)$sigma
+```
+
+The residual standard error is 2.25 points. This means that the model is off by about 2.25 points, on average.
+
+Together, these results show that we can do some moderate prediction of the average ACT score in a school only by knowing the median income.
+
+
+**Residual plot**
+
+$\rightarrow$ Examine a residual plot to see if we can improve the model.
+
+```{r}
+ggplot(fit_pm,aes(x=percent_married, y=.resid)) + 
+  geom_point() +
+  geom_smooth(method = "loess", formula = y ~ x) +
+  labs(x = "Percent married", y = "Residuals") +
+  theme_bw()
+```
+
+The residual plot suggests a quadratic model may be useful.
+
+```{r}
+fit_pm_quad <- lm(average_act ~ poly(percent_married, 2, raw = T), data = edgap)
+summary(fit_pm_quad)
+```
+
+The quadratic term is statistically significant, even though the improvement in accuracy is not large.
+
+```{r}
+ggplot(edgap, aes(x = percent_married, y = average_act)) + 
+  geom_point() + 
+  geom_smooth(method = "lm",formula = y ~ x) +
+  geom_smooth(method = "lm",formula = y ~ poly(x,2), color = "red") +
+  labs(x = "Percent married", y = "School ACT average (or equivalent if SAT score)") +
+  theme_bw()
+```
+
+The graph shows that the models are nearly identical.
+
+
+### Model selection
+
+Now that we understand how each variable is individually related to the ACT score, we want to know how to best use all of the socioeconomic variables to predict the ACT score.
+
+We do not have many input variables, so we can examine the full model.
+
+```{r}
+
+fit_full <- lm(average_act ~ percent_lunch + median_income + rate_unemployment + percent_college + percent_married, data = edgap)
+
+```
+
+Examine the summary of the fit
+
+```{r}
+
+summary(fit_full)
+
+```
+
+The coefficients for `median_income` and `percent_married` are not statistically significant. Additionally, the sign of the coefficients for `median_income` and `percent_married` do not make sense. These results support removing `median_income` and `percent_married` from the model. 
+
+
+#### Do best subset selection
+
+Use the `regsubsets` function from the `leaps` package to perform best subset selection in order to choose the best model to predict `average_act` from the socioeconomic predictors. 
+
+```{r}
+
+#perform best subset selection
+regfit_full <- regsubsets(average_act ~ percent_lunch + median_income + rate_unemployment + percent_college + percent_married, data = edgap)
+
+```
+
+Get the summary of the best subset selection analysis
+
+```{r}
+
+reg_summary <- summary(regfit_full)
+
+```
+
+
+What is the best model obtained according to Cp, BIC, and adjusted $R^2$? Make a plot of Cp, BIC, and adjusted $R^2$ vs. the number of variables in the model.
+
+```{r}
+#Set up a three panel plot
+par(mfrow = c(1,3))
+
+#Plot Cp
+plot(reg_summary$cp,type = "b",xlab = "Number of variables",ylab = "Cp")
+#Identify the minimum Cp
+ind_cp = which.min(reg_summary$cp)
+points(ind_cp, reg_summary$cp[ind_cp],col = "red",pch = 20)
+
+#Plot BIC
+plot(reg_summary$bic,type = "b",xlab = "Number of variables",ylab = "BIC")
+#Identify the minimum BIC
+ind_bic = which.min(reg_summary$bic)
+points(ind_bic, reg_summary$bic[ind_bic],col = "red",pch = 20)
+
+#Plot adjusted R^2
+plot(reg_summary$adjr2,type = "b",xlab = "Number of variables",ylab = TeX('Adjusted $R^2$'),ylim = c(0,1))
+
+#Identify the maximum adjusted R^2
+ind_adjr2 = which.max(reg_summary$adjr2)
+points(ind_adjr2, reg_summary$adjr2[ind_adjr2],col = "red",pch = 20)
+
+```
+
+The three measures agree that the best model has three variables.
+
+Show the best model for each possible number of variables. Focus on the three variable model.
+
+```{r}
+reg_summary$outmat
+```
+
+The best model uses the predictors `percent_lunch`, `rate_unemployment` and `percent_college`.
+
+Fit the best model and examine the results
+
+```{r}
+
+fit_best <- lm(average_act ~ percent_lunch + rate_unemployment + percent_college, data = edgap)
+
+```
+
+
+```{r}
+
+summary(fit_best)
+
+```
+
+
+#### Relative importance of predictors
+
+To compare the magnitude of the coefficients, we should first normalize the predictors. Each of the predictors `percent_lunch`, `rate_unemployment` and `percent_college` is limited to the interval (0,1), but they occupy different parts of the interval. We can normalize each variable through a z-score transformation:
+
+```{r}
+
+scale_z <- function(x, na.rm = TRUE) (x - mean(x, na.rm = na.rm)) / sd(x, na.rm)
+
+edgap_z <- edgap %>% 
+  mutate_at(c("percent_lunch","rate_unemployment","percent_college"),scale_z) 
+
+```
+
+$\rightarrow$ Fit the model using the transformed variables and examine the coefficients
+
+```{r}
+fit_z <- lm(average_act ~ percent_lunch + rate_unemployment + percent_college, data = edgap_z)
+
+summary(fit_z)
+```
+
+The coefficient on percent_lunch is an order of magnitude larger than the other coefficients. This supports the conclusion that percent_lunch is the most important predictor.
+
+Additionally, the performance of the single predictor model using percent_lunch is very close to the performance of the best model.
+
+
+## Additional step
+
+$\rightarrow$ In addition to completing the above analyses, you should ask and answer one question about the data set.
+
+## The Impact of Percent Lunch in Washington State and New York State
+We chose to compare Washington State and the State of New York. Both of these states have similar (and sufficiently large enough) numbers of entries. This reduces the chance of other errors/biases being included due to different sample sizes.
+
+```{r}
+edgap_count <- edgap %>%
+  count(state) %>%
+  mutate(state = fct_reorder(state, n))
+
+ggplot(edgap_count, aes(x = state, y = n)) +
+  geom_col() + 
+  labs(x = "State", y = "Count") 
+```
+
+We'll create a new dataset that selects only the socioeconomic factors we want to look at only from observations in the two states we are comparing.
+
+```{r}
+edgap_analysis <- edgap %>%
+  filter(state == c("WA", "NY")) %>%
+  mutate(state = as.factor(state)) %>%
+  select(rate_unemployment, percent_college, percent_married, median_income, average_act, percent_lunch, state)
+head(edgap_analysis)
+```
+
+
+## Distributions of Variables
+We can visualize the distributions of the socioeconomic factors we are studying to help us identify these differences between the two states.
+
+```{r}
+ggplot(edgap_analysis, aes(x=percent_lunch, color=state, fill=state)) + geom_density(alpha=0.1) + labs(title="Percent Free & Reduced Lunch Distribution", x="Percent Free & Reduced Lunch", y="Density") + theme_bw()
+
+ggplot(edgap_analysis, aes(x=median_income, color=state, fill=state)) + geom_density(alpha=0.1) + labs(title="Median Income Distribution", x="Median Income", y="Density") + theme_bw()
+
+ggplot(edgap_analysis, aes(x=percent_college, color=state, fill=state)) + geom_density(alpha=0.1) + labs(title="Percent College Distribution", x="Percent College", y="Density") + theme_bw()
+
+ggplot(edgap_analysis, aes(x=percent_married, color=state, fill=state)) + geom_density(alpha=0.1) + labs(title="Percent Married Distribution", x="Percent Married", y="Density") + theme_bw()
+
+ggplot(edgap_analysis, aes(x=rate_unemployment, color=state, fill=state)) + geom_density(alpha=0.1) + labs(title="Rate Unemployment Distribution", x="Rate Unemployment", y="Density") + theme_bw()
+
+ggplot(edgap_analysis, aes(x=average_act, color=state, fill=state)) + geom_density(alpha=0.1) + labs(title="Average ACT Distribution", x="ACT Score (or equivalent if SAT)", y="Density") + theme_bw()
+```
+
+From these plots we can see that the distributions of most variables in both states are similar, except for percent maried, average ACT score, and percent free and reduced lunch. The percentage of students with free and reduced lunch in WA and NY in particular are drastically different, depsite relatively similar median income distributions. Why is that? 
+The state of New York has a lot of high school students that have free/reduced lunch (with majority in 75%) while Washington has a lower percentage of students that have free/reduced lunch (with majority in 25-30%). 
+
+For additional research we thought that it might have been the different policies that each state have that qualifies a person for free/reduced lunch in each state. 
+
+In Washington State, a family of 4 will qualify for free/reduced lunch will have a maximum income of \$51,338 (https://www.benefits.gov/benefit/1994). In the State of New York, a family of 4 will qualify for free lunch will have a maximum income of \$34,450 and reduced lunch will have a maximum income of \$49,025 (https://otda.ny.gov/workingfamilies/schoollunch.asp). Therefore, there is a lower threshold to qualify for free and reduced lunch in New York compared to Washington. This explains the distributions we saw above and makes the comparison across these two states an interesting one to examine in more detail. Hopefully, the different rates of percent lunch might help us isolate the variable and gain a deeper understanding of how it impacts the average ACT score. An additional benefit of comparing the two states is that neither state required students to take the ACT or SAT at the time the data was collected (https://magoosh.com/hs/sat/states-that-require-the-act-or-sat/), which could skew the average ACT scores.
+
+
+## Scatter Plots of Variables
+Here we are analyzing the linear regression for both of these states comparing Average ACT score and the socioeconomic factors. This can help us visualize the differences between the two states.
+
+```{r}
+ggplot(edgap_analysis, aes(x = percent_lunch, y = average_act, color=state)) +
+  geom_point() +
+  labs(x = 'Percent reduced or free lunch', y = 'Average school ACT or equivalent if SAT') + geom_smooth(method="lm", formula = y~x, se=FALSE) +
+  theme_bw()
+
+ggplot(edgap_analysis, aes(x = median_income, y = average_act, color=state)) +
+  geom_point() +
+  labs(x = 'Median Income ($)', y = 'Average school ACT or equivalent if SAT') + geom_smooth(method="lm", formula = y~x, se=FALSE) +
+  theme_bw()
+
+ggplot(edgap_analysis, aes(x = median_income, y = average_act, color=state)) +
+  geom_point() +
+  scale_x_log10() +
+  labs(title="Log Scale", x = 'Median Income ($)', y = 'Average school ACT or equivalent if SAT') + geom_smooth(method="lm", formula = y~x, se=FALSE) +
+  theme_bw()
+
+ggplot(edgap_analysis, aes(x = percent_college, y = average_act, color=state)) +
+  geom_point() +
+  labs(x = 'Percent college', y = 'Average school ACT or equivalent if SAT') + geom_smooth(method="lm", formula = y~x, se=FALSE) +
+  theme_bw()
+
+ggplot(edgap_analysis, aes(x = percent_married, y = average_act, color=state)) +
+  geom_point() +
+  labs(x = 'Percent married', y = 'Average school ACT or equivalent if SAT') + geom_smooth(method="lm", formula = y~x, se=FALSE) +
+  theme_bw()
+
+library(latex2exp) #This library is used for LaTex in the axis labels
+edgap_analysis %>% 
+  ggplot(aes(x = sqrt(rate_unemployment), y = average_act, color=state)) +
+  geom_point() +
+  labs(x = TeX('$\\sqrt{$Rate of unemployment$}$'), y = 'Average school ACT or equivalent if SAT') + geom_smooth(method="lm", formula = y~x, se=FALSE) +
+  theme_bw()
+
+```
+
+From these plots and the previous distributions, we can see that Washington state seems to have higher average ACT scores. We can also see that the impact of a couple of the socioeconomic factors differs across the two states, which appears as different slopes in their regression lines. In particular, the regression lines for percent free and reduced lunch in the two states are very different, while all others appear to have approximately similar slopes. The different slope might mean that the impact of free and reduced lunch on ACT scores in the two states differs. This may be related to the aforementioned different policies.
+
+
+## Model Building
+To more closely examine the relation between percent free and reduced lunch and average ACT scores in the two states, we will build a linear regression model that accounts for the interaction between the percent free and reduced lunch and the state variables. This will allow us to capture and compare the different trends in each state.
+
+## Best Subset Selection
+
+Here, we'll determine which combination of variables produces a model with the closest fit to the data in the dataset.
+
+```{r}
+regfit_full <- regsubsets(average_act ~ . + percent_lunch:state, data = edgap_analysis)
+
+reg_summary <- summary(regfit_full)
+
+reg_summary$outmat 
+
+reg_summary$which
+```
+
+This tells us some possible important variables in predicting the average ACT score in our data might be `percent_lunch`, `stateWA`, `percent_lunch:stateWA`, and `percent_married`.
+
+## Find Best Overall Model
+
+To get a better understanding of which variables are the strongest predictors, we will look at a number of different metrics determining the fit of the model to the data we have. Here we chose to use $C_p$, BIC, and the Adjusted $R^2$ values. A lower $C_p$ and BIC score corresponds to a stronger fit, while a higher Adjusted $R^2$ corresponds to a better fit. The following code shows the scores for each score when a certain number of predictors are included.
+
+```{r}
+par(mfrow = c(1,3))
+
+plot(reg_summary$cp,type = "b",xlab = "Number of variables",ylab = "Cp")
+ind_cp = which.min(reg_summary$cp)
+points(ind_cp, reg_summary$cp[ind_cp],col = "red",pch = 20)
+
+plot(reg_summary$bic,type = "b",xlab = "Number of variables",ylab = "BIC")
+ind_bic = which.min(reg_summary$bic)
+points(ind_bic, reg_summary$bic[ind_bic],col = "red",pch = 20)
+
+
+plot(reg_summary$adjr2,type = "b",xlab = "Number of variables",ylab = "Adjusted R2")
+ind_adjr2 = which.max(reg_summary$adjr2)
+points(ind_adjr2, reg_summary$adjr2[ind_adjr2],col = "red",pch = 20)
+
+```
+
+From these plots, we can expect a model with 3 or 4 predictors seems to minimize the $C_p$ and BIC scores while maximizing the Adjusted $R^2$ value. Thus, a model containing this number of predictors better fits to the data in our dataset, so we should aim to include this number of variables. However, the selection of the variables have an effect on the fit of the model, so we should look more closely at which variables to choose.
+
+
+## Comparing Statistical Significance
+
+We know we want to include 3-4 predictors to optimize the fit of our model to our data from the previous section and we have some idea of which these might be from before as well. Now, we'll further examine which variables we might include in our model. To help us determine this, we will look at the statistical significance of each variable in the data. In particular, we are interested in the $p$ values. A $p$ value tells us how certain we are that the impact of a variable is nonzero in our model. However, it does not quantify the impact of the variable (it only tells us that there is some impact of that variable on ACT scores).
+
+```{r}
+fit <- lm(average_act ~ . + percent_lunch:state, data = edgap_analysis)
+round(summary(fit)$coefficients,3)
+```
+
+So, we can see that the intercept, `percent_lunch`, `stateWA`, and `percent_lunch:stateWA` have significantly smaller $p$-values than the other variables. These variables correspond to the impact of percent free and reduced lunch and distinguishes the impact of this variable in Washington and New York. In other words, the `percent_lunch` variable is the most likely to be nonzero, along with the likelihood it has a different impact in the two states. Since these $p$-values are so small, we can be pretty certain there exists a correlation between the percent free and reduced lunch and average ACT score (like in the entire dataset), but that the correlation in Washington and New York differs. This confirms what we saw in our exploratory plots.
+
+
+## Look at the Coefficients
+
+Now, we will look at the precise values of the coefficients in our model. Here, we explicitly look at the coefficients for a model using the intercept, `percent_lunch`, `stateWA`, `percent_lunch:stateWA` to predict ACT scores, due to their high statistcal significance. This also allows us to more accurately isolate the impact of percent free and reduced lunch in the two states. Here, we'll round to three decimal places.
+
+```{r}
+fit <- lm(average_act ~ percent_lunch*state, data = edgap_analysis)
+round(summary(fit)$coefficients,3)
+```
+
+More explicitly,
+
+```{r}
+round(coef(fit),3)
+```
+
+
+From this we can find the precise regression models in each state.
+
+New York State:
+$$(\text{Average ACT Score in NY}) = 28.553 - 14.561\times(\text{% free & reduced lunch in NY})$$
+This means that the New York \'baseline average score\' for the ACT is about 28.5, with standard error of about 0.6. However, the average ACT score drops by about 1.5 (standard error about 0.08) for every 10% increase in percent of free and reduced lunch.
+
+
+Washington State:
+$$(\text{Average ACT Score in WA}) = 24.749 - 9.076\times(\text{% free & reduced lunch in WA})$$
+This means that the Washington \'baseline average score\' for the ACT is about 24.7. However, the average ACT score drops by about 0.9 for every 10% increase in percent of free and reduced lunch.
+
+Thus, the impact of percent free and reduced lunch in Washington is less than it is in New York, by approximately 0.6 on the average ACT score for every 10% increase in percent of free and reduced lunch.
+
+## Conclusion
+
+Now that we've conducted this analysis, we can return to the original questions we defined at the outset of this problem. Now, we should be able to better understand which of the five factors we chose most correlates with the average ACT score. We should also be able to quantify the strength of these relationships as well as discuss its behavior. This will allow us to determine which of the variables seems to be the most important in predicting the average ACT score of a school, which helps us to begin asking the question of how we can combat education inequality. It's important to note here, before looking more closely at any of the results, that these results show only correlation, and not causation, so improper manipulation of any of these variables, such as ending the policy of free & reduced lunch policies will not improve ACT scores. Rather, we should use these metrics as inspiration that point us in the direction for further research digging into the root causes of education inequality. 
+
+Using linear regression models, we were able to show that the correlation between each of the socioeconomic variables we discussed was strong, as shown by the $p$-values. When we fit tried to fit the data with 5 models with each socioeconomic factor as the lone predictor, we found that they all correlated strongly. In fact, each of these models showed a $p$-value very near zero for the coefficient of the correlation between each socioeconomic factor and the average ACT score at a school when considered as the only predictor. That is, every one of the five socioeconomic factors has a statistically significant correlation to the average ACT score. However, we also computed other metrics to analyze the fit of these 5 models, such as the $R^2$ value and residual standard error (RSE). From these, we can determine the percentage of the variance in the data that the model explains and the average error of its predictions, respectively. 
+
+According to these measures, we found that the median household income of the geographic region near the school was moderately able to predict the school's average ACT score. The two variables had a positive correlation and, after a logarithmic transform of the data, the model was able to explain 21.6% in the variance of the ACT score and was, on average, 2.22 points off on it's predictions of the ACT score of the school. Also with a positive correlation, the percentage of adults with a college degree explained 21.0% in the variance of the ACT score and made predictions for the ACT score that were off by 2.23 points on average. The possibility of a higher order polynomial regression was considered, but the quadratic term was determined to be statistically insignificant and was thus excluded. The unemployment rate, in contrast, correlated negatively with the average ACT score of a school, but explained only 18.8% in the variance of the ACT score and predicted ACT scores that were on average 2.26 points off from the actual value. Here, a square root transformation provided only a small improvement over the linear model, but due to the skewed distribution of the unemployment rate, the relative infrequency of data points with high unemployment rates meant this difference had a muted effect on the $R^2$ and RSE values. The percentage of children in a married couple family also showed a positive correlation with and explained 19.4% in the variance in ACT scores. This model using only this factor to predict ACT scores was on average wrong by 2.25 points. Although the model had a statistically significant quadratic term, this term failed to improve the accuracy significantly. The best predictor by far was the percentage of students on free and reduced lunch at a school. This variable had a negative correlation with the average ACT score of the school that explained 61.6% in the variance of the ACT score. The residual standard error of this model is 1.56 points meaning that the model's predicted ACT score is on average only off by about 1.56 points from the school's actual average ACT score. While this may not seem like much of an improvement, to be consistently 0.7 points more accurate on average over the entire dataset represents a marked improvement in accuracy.
+
+
+However, this analysis was conducted when each variable as the sole predictor. Once we considered the full set of variables as potential predictors at once, the percentage of students receiving free and reduced lunch was again easily the most significant predictor. To determine this, we conducted the best subset selection for a linear regression model considering all of the five socioeconomic factors we were interested in. Then, we found the best model uses the 3 predictors according to BIC $C_p$ and adjusted $R^2$, which were the percentage of the student population at a school that qualified for free and reduced lunch, the unemployment rate, and the percentage of adults with a college degree. Analysis of the $p$-values of each of the coefficients for these variables in the model showed that they were all statiscally significant - that is, with very small $p$-values. Thus, we could be fairly certain that all of these variables had an nonzero impact on our prediction of the average ACT score of a school. So, to compare these impacts and determine the relative importance of each of these predictors, we normalized the predictors so that they were all on similar scales. This allows us to directly compare the magnitude of the coefficients, which tells us for which variable a similar change would produce the greatest change in the predicted average ACT score. In other words, this allowed us to directly compare the impact of each variable. Doing this, we found that the coefficient on the percentage of students receiving free & reduced lunch is an order of magnitude larger than the other coefficients. This supports the conclusion that percentage of students receiving free & reduced lunch is the most important predictor of the average ACT score of the school, and by some margin. This conclusion is further strengthened when we analyze the performance of this model, since the model considering these three variables had a RSE of 1.522 and an $R^2$ value of 0.631, meaning that it performed extremely similarly to the performance of the model considering only the percentage of students receiving free & reduced lunch as the sole predictor.
+
+```{r}
+# this allows subplots for ggplot
+library(patchwork)
+
+p0 <- ggplot(fit_pl,aes(x=percent_lunch, y=average_act)) + 
+  geom_point() +
+  geom_smooth(method = "loess", formula = y ~ x) +
+  labs(title = "Percent Lunch as Sole Predictor", x = "Percent Free & Reduced Lunch", y = "Predicted Average ACT") +
+  theme_bw()
+
+p1 <- ggplot(fit_pl,aes(x=percent_lunch, y=.resid)) + 
+  geom_point() +
+  geom_smooth(method = "loess", formula = y ~ x) +
+  labs(x = "Percent Free & Reduced Lunch", y = "Residuals") +
+  theme_bw()
+
+p0 + p1
+```
+
+
+Therefore, it appears that out of the five socioeconomic factors we chose to examine, the percentage of students receiving free & reduced lunch at a school is easily the most important predictor of the average ACT score of the school. Again, it is important to highlight that this does not mean that a low percentage of students receiving free & reduced lunch causes higher ACT scores, but that it correlates with it. The true cause of the correlation is unknown by this analysis. Allong with this point, it is important to consider other limitations of our results. While there are many of these, they main ones can be segmented into two main categories: limitations in the data we used and limitations in our analysis.
+
+We can be confident in the quality of the data we did use, since we sourced it from the Census and EdGap databases, both of which have reliable checks on the accuracy of the data. However, as in any model building application, our results could have been improved by improving our data. One of the main shortcomings of our data is the disconnect between the Census data, which is collected on a geographic basis, and the EdGap data, which is collected at a school level. Thus, there exists a fundamental disconnect between these two datasets that may not be reconciled perfectly. For instance, not every child attends the school that is nearest them geographically. Additionally, the Census data measures the population at large, not just the student population. So, median income on the census, for instance, does not correlate to the median income at a school, since the Census data includes individuals without children. Another large shortcoming of the data we used was that it only included entries from 20 states, meaning that the majority of states were overlooked in our dataset. This could have a large impact on the data, as our additional step shows how these correlations can vary greatly between two states. We could also have considered the effects of many more socioeconomic factors beyond the relatively small number of five that we decided to study in detail. Furthermore, data on private schools either does not exist or is prohibitively difficult to access and use, meaning that our data completely excludes this potentially large and impactful subset of the student population. We also are forced to compare academic performance using ACT scores and, at times, the transformations of their SAT counterparts since this is the most reliable data we have access to. While these scores may not reflect intelligence or academic performance accurately, they do play a significant role in many college admissions processes and thus carry with them huge impacts on the educational opportunities available to students. However, the two tests are not perfectly compatible, and so we must admit that, even after translation, the two test scores may not be perfectly compatible. Further variability in the data we fail to consider includes variation in policy, such as the threshold for free & reduced lunch and the requirement (or lack thereof) to take either the ACT or SAT in certain states. The final limitation in our data that I will mention here is that it is derived from only one academic year, which could mask certain properties of the data. All of these limitations in data, and many others there is not space to mention, limit the conclusions we can draw and could potentially introduce biases into our results, since our analysis does not apply to these underrepresented or missing areas.
+
+The methods we used to analyze the data are useful for answering the questions we set out to answer (mostly regarding the correlation between these factors and ACT scores), but other models and approaches could help us answer other questions or predict the data more successfully. Improvements in this area could be achieved by any number of means, including, but not limited to considering more models. While the linear regression models we used are well adapted to the problem of understand which factors are 'most' important predictors and how they interact, perhaps we could have produced more accurate predictions with a neural network or other model, albeit perhaps without the same clear insight on the importance of each variable as a predictor. Also, since our analysis relies on the data we feed it, all the limitations we discussed in our data flow into our model and limit the conclusions we can draw from them.
+
+Therefore, our work has shown that the percentage of students receiving free & reduced lunch has a shockingly high correlation with the average ACT score of a school in this US. While this points at a large inequality in public education, we cannot draw any firm conclusions about the causes or draw up policy based solely on our results. Instead, its important to research more into the root cause of this inequality and determine the best way to solve this issue at its root. Still then, it is more than likely that the problem of education inequality will persist due to other factors that deserve equal scrutiny to this one.
